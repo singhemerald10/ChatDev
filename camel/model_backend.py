@@ -85,19 +85,23 @@ class OpenAIModel(ModelBackend):
             num_max_token_map = {
                 "gpt-3.5-turbo": 4096,
                 "gpt-3.5-turbo-16k": 16384,
-                "gpt-3.5-turbo-0613": 4096,
-                "gpt-3.5-turbo-16k-0613": 16384,
                 "gpt-4": 8192,
-                "gpt-4-0613": 8192,
                 "gpt-4-32k": 32768,
-                "gpt-4-turbo": 100000,
-                "gpt-4o": 4096, #100000
-                "gpt-4o-mini": 16384, #100000
+                # ↓ realistic limits for most keys
+                "gpt-4-turbo": 8192,
+                "gpt-4-turbo-2024-04-09": 128000,
+                "gpt-4o": 8192,
+                "gpt-4o-mini": 16384,
+                "o1": 128000,
             }
-            num_max_token = num_max_token_map[self.model_type.value]
-            num_max_completion_tokens = num_max_token - num_prompt_tokens
-            self.model_config_dict['max_tokens'] = num_max_completion_tokens
+            num_max_token = num_max_token_map.get(self.model_type.value, 4096)
+            # never exceed model limit
+            num_max_completion_tokens = max(512, min(num_max_token - num_prompt_tokens, 4096))
+            self.model_config_dict["max_tokens"] = num_max_completion_tokens
 
+            if self.model_type.value.lower().startswith("o1"):
+                if "max_tokens" in self.model_config_dict:
+                    self.model_config_dict["max_completion_tokens"] = self.model_config_dict.pop("max_tokens")
             response = client.chat.completions.create(*args, **kwargs, model=self.model_type.value,
                                                       **self.model_config_dict)
 
@@ -126,6 +130,7 @@ class OpenAIModel(ModelBackend):
                 "gpt-4-turbo": 100000,
                 "gpt-4o": 4096, #100000
                 "gpt-4o-mini": 16384, #100000
+                "o1": 128000,
             }
             num_max_token = num_max_token_map[self.model_type.value]
             num_max_completion_tokens = num_max_token - num_prompt_tokens
@@ -188,6 +193,7 @@ class ModelFactory:
             ModelType.GPT_4_TURBO_V,
             ModelType.GPT_4O,
             ModelType.GPT_4O_MINI,
+            ModelType.O1,
             None
         }:
             model_class = OpenAIModel

@@ -11,6 +11,7 @@ import requests
 
 from chatdev.codes import Codes
 from chatdev.documents import Documents
+from chatdev.hybrid_memory import HybridMemory
 from chatdev.roster import Roster
 from chatdev.utils import log_visualize
 from ecl.memory import Memory
@@ -51,10 +52,11 @@ class ChatEnvConfig:
 
 class ChatEnv:
     def __init__(self, chat_env_config: ChatEnvConfig):
+        self.last_actions: Dict[str, str] = {}
         self.config = chat_env_config
         self.roster: Roster = Roster()
         self.codes: Codes = Codes()
-        self.memory: Memory = Memory()
+        self.memory: HybridMemory = None
         self.proposed_images: Dict[str, str] = {}
         self.incorporated_images: Dict[str, str] = {}
         self.requirements: Documents = Documents()
@@ -98,11 +100,7 @@ class ChatEnv:
             os.mkdir(self.env_dict['directory'])
     
     def init_memory(self):
-        self.memory.id_enabled = True
-        self.memory.directory = os.path.join(os.getcwd(),"ecl","memory")
-        if not os.path.exists(self.memory.directory):
-            os.mkdir(self.memory.directory)
-        self.memory.upload()
+        pass
 
     def exist_bugs(self) -> tuple[bool, str]:
         directory = self.env_dict['directory']
@@ -308,3 +306,21 @@ class ChatEnv:
                 download(image_url, filename)
 
         return images
+
+    def log(self, message: str, level: str = "INFO"):
+        """
+        Simple fallback logging method to ensure compatibility with phases
+        expecting ChatEnv.log(). Writes to console and optionally to log file.
+        """
+        from chatdev.utils import log_visualize
+
+        # Print to console for visibility
+        print(f"[{level}] {message}")
+
+        # Also visualize if log_visualize is available
+        try:
+            log_visualize("ChatEnv", message)
+        except Exception:
+            pass
+
+

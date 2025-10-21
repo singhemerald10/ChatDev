@@ -52,7 +52,8 @@ def get_config(company):
     config_files = [
         "ChatChainConfig.json",
         "PhaseConfig.json",
-        "RoleConfig.json"
+        "RoleConfig.json",
+        "RoleConstraints.json"
     ]
 
     config_paths = []
@@ -89,7 +90,7 @@ args = parser.parse_args()
 # ----------------------------------------
 #          Init ChatChain
 # ----------------------------------------
-config_path, config_phase_path, config_role_path = get_config(args.config)
+config_path, config_phase_path, config_role_path, config_constraints_path = get_config(args.config)
 args2type = {'GPT_3_5_TURBO': ModelType.GPT_3_5_TURBO,
              'GPT_4': ModelType.GPT_4,
             #  'GPT_4_32K': ModelType.GPT_4_32k,
@@ -97,6 +98,7 @@ args2type = {'GPT_3_5_TURBO': ModelType.GPT_3_5_TURBO,
             #  'GPT_4_TURBO_V': ModelType.GPT_4_TURBO_V
             'GPT_4O': ModelType.GPT_4O,
             'GPT_4O_MINI': ModelType.GPT_4O_MINI,
+            'O1': ModelType.O1,
              }
 if openai_new_api:
     args2type['GPT_3_5_TURBO'] = ModelType.GPT_3_5_TURBO_NEW
@@ -104,10 +106,11 @@ if openai_new_api:
 chat_chain = ChatChain(config_path=config_path,
                        config_phase_path=config_phase_path,
                        config_role_path=config_role_path,
+                       config_constraints_path=config_constraints_path,
                        task_prompt=args.task,
                        project_name=args.name,
                        org_name=args.org,
-                       model_type=args2type[args.model],
+                       model_type=ModelType.GPT_4_TURBO,
                        code_path=args.path)
 
 # ----------------------------------------

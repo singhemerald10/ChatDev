@@ -1,0 +1,3 @@
+# This file lists the dependencies for the 2048 game project.
+# Python version
+python>=3.7

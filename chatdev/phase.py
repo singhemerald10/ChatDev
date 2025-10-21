@@ -140,6 +140,8 @@ class Phase(ABC):
                 # we log the second interaction here
                 log_visualize(role_play_session.assistant_agent.role_name,
                               conversation_meta + "[" + role_play_session.user_agent.system_message.content + "]\n\n" + assistant_response.msg.content)
+                chat_env.last_actions[
+                    role_play_session.assistant_agent.role_name] = assistant_response.msg.content  # ADDED LINE
                 if role_play_session.assistant_agent.info:
                     seminar_conclusion = assistant_response.msg.content
                     break
@@ -150,6 +152,7 @@ class Phase(ABC):
                 # here is the result of the second interaction, which may be used to start the next chat turn
                 log_visualize(role_play_session.user_agent.role_name,
                               conversation_meta + "[" + role_play_session.assistant_agent.system_message.content + "]\n\n" + user_response.msg.content)
+                chat_env.last_actions[role_play_session.user_agent.role_name] = user_response.msg.content  # ADDED LINE
                 if role_play_session.user_agent.info:
                     seminar_conclusion = user_response.msg.content
                     break

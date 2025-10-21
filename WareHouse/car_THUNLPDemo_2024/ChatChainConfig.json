@@ -85,6 +85,6 @@
     "web_spider": "False",
     "self_improve": "False",
     "incremental_develop": "False",
-    "with_memory": "False",
+    "with_memory": "True",
     "background_prompt": "ChatDev is a virtual LLM Agent software company aiming to build the best software with simple but robust code, maximizing the controllability and visual effect of the software in pure python."
 }

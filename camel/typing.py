@@ -44,6 +44,7 @@ class RoleType(Enum):
 
 
 class ModelType(Enum):
+    O1 = "o1"
     GPT_3_5_TURBO = "gpt-3.5-turbo-16k-0613"
     GPT_3_5_TURBO_NEW = "gpt-3.5-turbo-16k"
     GPT_4 = "gpt-4"

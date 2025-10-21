@@ -12,6 +12,7 @@
 # limitations under the License.
 # =========== Copyright 2023 @ CAMEL-AI.org. All Rights Reserved. ===========
 import copy
+import os
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from camel.agents import (
@@ -23,7 +24,10 @@ from camel.agents.chat_agent import ChatAgentResponse
 from camel.messages import ChatMessage, UserChatMessage
 from camel.messages import SystemMessage
 from camel.typing import ModelType, RoleType, TaskType, PhaseType
+from chatdev.hybrid_memory import HybridMemory
 from chatdev.utils import log_arguments, log_visualize
+root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+memory_path = os.path.join(root_dir, "ecl", "memory" ".chatdev_memory.json")
 
 
 @log_arguments
@@ -91,7 +95,7 @@ class RolePlaying:
             extend_sys_msg_meta_dicts: Optional[List[Dict]] = None,
             extend_task_specify_meta_dict: Optional[Dict] = None,
             background_prompt: Optional[str] = "",
-            memory = None,
+            memory = HybridMemory(storage_path=memory_path),
     ) -> None:
         self.with_task_specify = with_task_specify
         self.with_task_planner = with_task_planner

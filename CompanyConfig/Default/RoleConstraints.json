@@ -1,0 +1,101 @@
+{
+  "role_constraints": {
+    "Chief Executive Officer": {
+      "allow": [
+        "(?i)\\b(decide|approve|prioritize|strategy|policy|vision|communicat(e|ion)|leadership|direction|resource allocation)\\b",
+        "(?i)\\b(business|market|revenue|stakeholder|goal|planning|organizational)\\b"
+      ],
+      "deny": [
+        "(?i)\\b(def|class|import|SELECT|INSERT|DELETE|UPDATE|print\\(|console\\.log)\\b",
+        "(?i)\\b(unit test|pytest|junit|coding|implementation|refactor)\\b"
+      ]
+    },
+
+    "Chief Product Officer": {
+      "allow": [
+        "(?i)\\b(product (vision|strategy|design|spec|requirement|roadmap|launch|plan))\\b",
+        "(?i)\\b(user research|UX|UI|feature|MVP|prototype|OKR|KPI)\\b"
+      ],
+      "deny": [
+        "(?i)\\b(def|class|import|database|query|python|javascript|java|sql|docker)\\b",
+        "(?i)\\b(test case|debug|compile|run code)\\b"
+      ]
+    },
+
+    "Chief Technology Officer": {
+      "allow": [
+        "(?i)\\b(architecture|infrastructure|scalability|cloud|deployment|technical strategy|system design|innovation)\\b",
+        "(?i)\\b(technology roadmap|R&D|data pipeline|framework|integration)\\b"
+      ],
+      "deny": [
+        "(?i)\\b(hiring|recruitment|compensation|training plan|payroll)\\b",
+        "(?i)\\b(advertising|marketing|sales pitch)\\b"
+      ]
+    },
+
+    "Chief Human Resource Officer": {
+      "allow": [
+        "(?i)\\b(recruitment|hiring|training|onboarding|compensation|policy|employee engagement|succession|diversity)\\b",
+        "(?i)\\b(performance review|benefits|promotion|organizational culture)\\b"
+      ],
+      "deny": [
+        "(?i)\\b(def|class|import|debug|unit test|deploy|code)\\b",
+        "(?i)\\b(marketing strategy|product design|architecture diagram)\\b"
+      ]
+    },
+
+    "Chief Creative Officer": {
+      "allow": [
+        "(?i)\\b(brand|creative|design|visual|aesthetic|logo|theme|concept|art direction|storyboard|campaign)\\b",
+        "(?i)\\b(music|animation|illustration|UI design|identity|experience)\\b"
+      ],
+      "deny": [
+        "(?i)\\b(database|schema|API|endpoint|algorithm|class|function|refactor)\\b"
+      ]
+    },
+
+    "Counselor": {
+      "allow": [
+        "(?i)\\b(advice|suggest|recommend|consult|feedback|discussion|collaboration|opinion|insight)\\b",
+        "(?i)\\b(user|customer|team|decision|support|evaluation|planning)\\b"
+      ],
+      "deny": [
+        "(?i)\\b(def|class|import|code|compile|unit test|docker|SQL)\\b",
+        "(?i)\\b(executive decision|final approval)\\b"
+      ]
+    },
+
+    "Programmer": {
+      "allow": [
+        "(?i)\\b(code|function|algorithm|logic|implementation|refactor|debug|variable|compile|error|syntax|performance|efficiency)\\b",
+        "(?i)\\b(build|develop|execute|test|fix|optimize|framework|library|module|API)\\b"
+      ],
+      "deny": [
+        "(?i)\\b(policy|budget|marketing|recruitment|strategy|creative direction|legal|finance)\\b"
+      ]
+    },
+
+
+    "Code Reviewer": {
+      "allow": [
+        "(?i)\\b(review|evaluate|improve|refactor|optimize|comment|feedback|readability|style|performance|bug)\\b",
+        "(?i)\\b(test coverage|robustness|error handling|documentation|lint)\\b"
+      ],
+      "deny": [
+        "(?i)\\b(budget|strategy|vision|recruitment|creative design|policy)\\b",
+        "(?i)\\b(write a new implementation|generate new code)\\b"
+      ]
+    },
+
+    "Software Test Engineer": {
+      "allow": [
+        "(?i)\\b(test|unit test|integration test|assert|bug|QA|verification|validation|automation|selenium|pytest|coverage)\\b",
+        "(?i)\\b(report|evaluate|detect|issue|reproduce|log|trace)\\b"
+      ],
+      "deny": [
+        "(?i)\\b(hiring|branding|budget|policy|strategy|creative|compose|marketing)\\b",
+        "(?i)\\b(implement feature|architect|refactor design)\\b"
+      ]
+    }
+  }
+}

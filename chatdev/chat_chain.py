@@ -14,6 +14,12 @@ from chatdev.statistics import get_info
 from camel.web_spider import modal_trans
 from chatdev.utils import log_visualize, now
 
+from chatdev.role_validation import RoleValidator
+from chatdev.cycle_detector import CycleDetector
+from chatdev.hybrid_memory import HybridMemory
+from chatdev.dta import DynamicTerminationAgent
+root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+memory_path = os.path.join(root_dir, "ecl", "memory" ".chatdev_memory.json")
 
 def check_bool(s):
     return s.lower() == "true"
@@ -25,6 +31,7 @@ class ChatChain:
                  config_path: str = None,
                  config_phase_path: str = None,
                  config_role_path: str = None,
+                 config_constraints_path: str = None,
                  task_prompt: str = None,
                  project_name: str = None,
                  org_name: str = None,
@@ -42,6 +49,8 @@ class ChatChain:
         """
 
         # load config file
+
+        self.config_constraints_path = config_constraints_path
         self.config_path = config_path
         self.config_phase_path = config_phase_path
         self.config_role_path = config_role_path
@@ -56,6 +65,8 @@ class ChatChain:
             self.config_phase = json.load(file)
         with open(self.config_role_path, 'r', encoding="utf8") as file:
             self.config_role = json.load(file)
+        with open(self.config_constraints_path, 'r', encoding="utf8") as file:
+            self.config_constraints = json.load(file)
 
         # init chatchain config and recruitments
         self.chain = self.config["chain"]
@@ -84,6 +95,16 @@ class ChatChain:
         self.role_prompts = dict()
         for role in self.config_role:
             self.role_prompts[role] = "\n".join(self.config_role[role])
+
+        # integration
+        self.role_validator = RoleValidator(self.config_constraints)
+        self.cycle_detector = CycleDetector(window=16, min_cycle_len=2)
+        self.memory = HybridMemory(storage_path=memory_path)
+        self.termination_agent = DynamicTerminationAgent(
+            max_steps=int(self.config.get("max_steps", 500)),
+            idle_threshold_sec=int(self.config.get("idle_timeout_sec", 300)),
+            cycle_limit=int(self.config.get("cycle_limit", 3))
+        )
 
         # init log
         self.start_time, self.log_filepath = self.get_logfilepath()
@@ -120,43 +141,103 @@ class ChatChain:
 
     def execute_step(self, phase_item: dict):
         """
-        execute single phase in the chain
-        Args:
-            phase_item: single phase configuration in the ChatChainConfig.json
-
-        Returns:
-
+        Execute a single phase in the chain with integrated reliability checks
+        (Role validation, memory persistence, cycle detection, dynamic termination).
         """
 
         phase = phase_item['phase']
         phase_type = phase_item['phaseType']
-        # For SimplePhase, just look it up from self.phases and conduct the "Phase.execute" method
+
+        # --- Initialize reliability modules ---
+        role_validator = getattr(self, "role_validator", None)
+        cycle_detector = getattr(self, "cycle_detector", None)
+        hybrid_memory = getattr(self, "hybrid_memory", None)
+        dta = getattr(self, "dta", None)
+
+        # --- run the phase ---
         if phase_type == "SimplePhase":
             max_turn_step = phase_item['max_turn_step']
             need_reflect = check_bool(phase_item['need_reflect'])
+
             if phase in self.phases:
-                self.chat_env = self.phases[phase].execute(self.chat_env,
-                                                           self.chat_turn_limit_default if max_turn_step <= 0 else max_turn_step,
-                                                           need_reflect)
+                # Execute the phase with default or custom step limit
+                self.chat_env = self.phases[phase].execute(
+                    self.chat_env,
+                    self.chat_turn_limit_default if max_turn_step <= 0 else max_turn_step,
+                    need_reflect
+                )
             else:
                 raise RuntimeError(f"Phase '{phase}' is not yet implemented in chatdev.phase")
-        # For ComposedPhase, we create instance here then conduct the "ComposedPhase.execute" method
+
         elif phase_type == "ComposedPhase":
             cycle_num = phase_item['cycleNum']
             composition = phase_item['Composition']
             compose_phase_class = getattr(self.compose_phase_module, phase)
             if not compose_phase_class:
                 raise RuntimeError(f"Phase '{phase}' is not yet implemented in chatdev.compose_phase")
-            compose_phase_instance = compose_phase_class(phase_name=phase,
-                                                         cycle_num=cycle_num,
-                                                         composition=composition,
-                                                         config_phase=self.config_phase,
-                                                         config_role=self.config_role,
-                                                         model_type=self.model_type,
-                                                         log_filepath=self.log_filepath)
+
+            compose_phase_instance = compose_phase_class(
+                phase_name=phase,
+                cycle_num=cycle_num,
+                composition=composition,
+                config_phase=self.config_phase,
+                config_role=self.config_role,
+                model_type=self.model_type,
+                log_filepath=self.log_filepath
+            )
             self.chat_env = compose_phase_instance.execute(self.chat_env)
         else:
             raise RuntimeError(f"PhaseType '{phase_type}' is not yet implemented.")
+
+        # --- After phase execution, perform reliability checks ---
+        if hasattr(self.chat_env, "last_actions"):
+            for role_name, action_text in self.chat_env.last_actions.items():
+                if not action_text:
+                    continue
+
+                # 1. Validate role behavior
+                if role_validator:
+                    ok, msg = role_validator.enforce(role_name, action_text)
+                    if not ok:
+                        self.chat_env.log(f"[RoleValidator] {role_name} -> {msg}")
+                        # Optionally re-prompt or reassign agent here
+                        continue
+
+                # 2. Record in hybrid memory
+                if hybrid_memory:
+                    hybrid_memory.write(
+                        text=action_text,
+                        meta={"role": role_name, "phase": phase},
+                        persist=True
+                    )
+
+                # 3. Track and detect cycles
+                if cycle_detector:
+                    cycle_detector.add_action(role_name, action_text)
+                    cycle_info = cycle_detector.detect_cycle(role_name)
+                    if cycle_info:
+                        self.chat_env.log(
+                            f"[CycleDetector] Cycle detected for {role_name}: "
+                            f"{cycle_info['sequence']} (len={cycle_info['cycle_len']})"
+                        )
+                        resolution = cycle_detector.resolve(role_name)
+                        self.chat_env.log(f"[CycleDetector] Suggested resolution: {resolution}")
+
+        # --- 4. Termination evaluation ---
+        if dta and cycle_detector:
+            term_decision = dta.maybe_terminate(self.chat_env, cycle_detector)
+            if term_decision.get("terminate"):
+                self.chat_env.log(f"[DTA] Termination triggered: {term_decision['reason']}")
+                self.chat_env.terminated = True
+                return term_decision
+
+        # --- 5. Return current environment state ---
+        return {
+            "phase": phase,
+            "terminated": getattr(self.chat_env, "terminated", False),
+            "memory_size": len(hybrid_memory.long_term) if hybrid_memory else None,
+            "last_actions": getattr(self.chat_env, "last_actions", {}),
+        }
 
     def execute_chain(self):
         """
@@ -207,7 +288,9 @@ class ChatChain:
         self.chat_env.set_directory(software_path)
 
         if self.chat_env.config.with_memory is True:
-            self.chat_env.init_memory()
+            self.chat_env.memory = self.memory
+            self.chat_env.init_memory() # Now this simplified method simply executes 'pass'
+
 
         # copy config files to software path
         shutil.copy(self.config_path, software_path)
@@ -350,6 +433,7 @@ then you should return a message in a format like \"<INFO> revised_version_of_th
             task_prompt="Do prompt engineering on user query",
             with_task_specify=False,
             model_type=self.model_type,
+            memory=HybridMemory(storage_path=memory_path)
         )
 
         # log_visualize("System", role_play_session.assistant_sys_msg)
