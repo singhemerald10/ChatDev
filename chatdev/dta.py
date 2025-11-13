@@ -1,64 +1,78 @@
 import time
 from typing import Dict
-from chatdev.utils import log_visualize
-
+import json
+from datetime import datetime
 
 class DynamicTerminationAgent:
     """
-    Dynamic Termination Agent (DTA)
-    Monitors execution and decides whether to stop based on:
-      - Total step count (max_steps)
-      - Idle duration (idle_threshold_sec)
-      - Repeated cycles (cycle_limit)
+    Dynamic Termination Agent (research-ready)
+    Evaluates step, idle, and semantic cycle criteria with graded responses.
     """
 
-    def __init__(self, max_steps: int = 500, idle_threshold_sec: int = 300, cycle_limit: int = 3):
+    def __init__(
+        self,
+        max_steps: int = 500,
+        idle_threshold_sec: int = 300,
+        cycle_limit: int = 3,
+        log_file: str = "termination_log.jsonl"
+    ):
         self.max_steps = max_steps
         self.idle_threshold_sec = idle_threshold_sec
         self.cycle_limit = cycle_limit
-
-        # internal trackers
         self.step_count = 0
         self.last_progress_ts = time.time()
         self.cycle_hits: Dict[str, int] = {}
+        self.log_file = log_file
 
-    def maybe_terminate(self, chat_env, cycle_detector) -> Dict:
-        """
-        Evaluate termination conditions using environment state.
+    def _log(self, record: dict):
+        record["timestamp"] = datetime.utcnow().isoformat()
+        with open(self.log_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")
 
-        Args:
-            chat_env: Current ChatEnv instance.
-            cycle_detector: Instance of CycleDetector.
-
-        Returns:
-            dict: {"terminate": bool, "reason": str}
-        """
+    def maybe_terminate(self, chat_env, context: Dict) -> Dict:
         self.step_count += 1
-
-        # --- 1. Step limit ---
-        if self.step_count >= self.max_steps:
-            return {"terminate": True, "reason": f"Exceeded max steps ({self.max_steps})"}
-
-        # --- 2. Idle timeout ---
         now = time.time()
         idle_for = now - self.last_progress_ts
-        if idle_for > self.idle_threshold_sec:
-            return {"terminate": True, "reason": f"Idle timeout ({int(idle_for)}s)"}
+        record = {"step": self.step_count}
 
-        # --- 3. Detect persistent cycles ---
+        # Step limit
+        if self.step_count >= self.max_steps:
+            record.update({"terminate": True, "reason": "max_steps"})
+            self._log(record)
+            return record
+
+        # Idle timeout
+        if idle_for > self.idle_threshold_sec:
+            record.update({"terminate": True, "reason": f"idle_{int(idle_for)}s"})
+            self._log(record)
+            return record
+
+        # Cycle checks
+        cycle_detector = context.get("cycle_detector")
         if hasattr(chat_env, "last_actions"):
-            for agent, action in chat_env.last_actions.items():
-                if not action:
-                    continue
-                det = cycle_detector.detect_cycle(agent)
+            for agent, _ in chat_env.last_actions.items():
+                det = cycle_detector.detect_cycle(agent) if cycle_detector else None
                 if det:
                     self.cycle_hits[agent] = self.cycle_hits.get(agent, 0) + 1
-                    log_visualize(f"[DTA] Detected cycle for {agent} ({self.cycle_hits[agent]}/{self.cycle_limit})")
                     if self.cycle_hits[agent] >= self.cycle_limit:
-                        return {"terminate": True, "reason": f"Repeated cycles for {agent}"}
+                        record.update({
+                            "terminate": True,
+                            "reason": f"persistent_cycles_{agent}",
+                            "hits": self.cycle_hits[agent],
+                        })
+                        self._log(record)
+                        return record
 
-        # --- 4. Update last progress timestamp ---
+        # success condition hook (optional)
+        if getattr(chat_env, "task_success", False):
+            record.update({"terminate": True, "reason": "success"})
+            self._log(record)
+            return record
+
+        # progress
         if getattr(chat_env, "last_actions", {}):
             self.last_progress_ts = now
 
-        return {"terminate": False, "reason": "continue"}
+        record.update({"terminate": False, "reason": "continue"})
+        self._log(record)
+        return record

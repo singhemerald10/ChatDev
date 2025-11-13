@@ -1,55 +1,99 @@
 import re
-from typing import Dict, List, Tuple
+import json
+import logging
+import unicodedata
+from datetime import datetime
+from typing import Dict, List, Tuple, Optional
 
 class RoleValidator:
     """
-    Dual-Constraint role validator.
-    role_constraints format:
-      {
-        "RoleName": {
-            "allow": ["allowed phrase regex", ...],
-            "deny": ["forbidden phrase regex", ...]
-        },
-        ...
-      }
+    Dual-Constraint Role Validator (Research-Ready)
+    - Normalizes text for robust regex matching
+    - Applies deny > allow precedence
+    - Supports dynamic overrides
+    - Logs structured JSON decisions for reproducibility
     """
-    def __init__(self, role_constraints: Dict[str, Dict[str, List[str]]]):
-        # normalize regex lists
+
+    def __init__(
+        self,
+        role_constraints: Dict[str, Dict[str, List[str]]],
+        log_file: str = "role_validation_log.jsonl",
+    ):
         self.constraints = {}
-        for r, c in (role_constraints or {}).items():
-            self.constraints[r] = {
-                "allow": [re.compile(pat, re.I) for pat in c.get("allow", [])],
-                "deny": [re.compile(pat, re.I) for pat in c.get("deny", [])]
+        self.log_file = log_file
+        self.logger = logging.getLogger("RoleValidator")
+        self.overrides = {"allow": [], "deny": []}
+
+        for role, rules in (role_constraints or {}).items():
+            self.constraints[role] = {
+                "allow": [re.compile(p, re.I) for p in rules.get("allow", [])],
+                "deny": [re.compile(p, re.I) for p in rules.get("deny", [])],
             }
 
-    def validate_action(self, role_name: str, action_text: str) -> Tuple[bool, str]:
-        """Return (ok, reason). If not ok, reason explains violation."""
-        c = self.constraints.get(role_name)
+    # ---------- internal helpers ----------
+    def _normalize(self, text: str) -> str:
+        """Case-fold, remove punctuation/extra spaces."""
+        text = unicodedata.normalize("NFKC", text)
+        text = re.sub(r"[^\w\s]", " ", text).lower()
+        return re.sub(r"\s+", " ", text.strip())
+
+    def _log(self, record: dict):
+        record["timestamp"] = datetime.utcnow().isoformat()
+        with open(self.log_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")
+
+    # ---------- core ----------
+    def validate_action(self, role: str, text: str) -> Tuple[bool, str, dict]:
+        norm = self._normalize(text)
+        c = self.constraints.get(role)
+        details = {"role": role, "text": norm}
+
+        # unknown role
         if not c:
-            return True, "no_constraints"
-        # Deny checks first
+            details["decision"] = "no_constraints"
+            return True, "no_constraints", details
+
+        # overrides first
+        for pat in self.overrides["deny"]:
+            if pat.search(norm):
+                details.update({"decision": "deny_override", "pattern": pat.pattern})
+                return False, f"override_deny:{pat.pattern}", details
+
         for pat in c["deny"]:
-            if pat.search(action_text):
-                return False, f"forbidden_pattern_matched: {pat.pattern}"
-        # If allow list exists, require at least one match
+            if pat.search(norm):
+                details.update({"decision": "deny", "pattern": pat.pattern})
+                return False, f"forbidden_pattern:{pat.pattern}", details
+
+        for pat in self.overrides["allow"]:
+            if pat.search(norm):
+                details.update({"decision": "allow_override", "pattern": pat.pattern})
+                return True, "allow_override", details
+
         if c["allow"]:
             for pat in c["allow"]:
-                if pat.search(action_text):
-                    return True, "allowed"
-            return False, "no_allow_pattern_matched"
-        return True, "allowed_by_default"
+                if pat.search(norm):
+                    details.update({"decision": "allow", "pattern": pat.pattern})
+                    return True, "allowed", details
+            details["decision"] = "no_allow_match"
+            return False, "no_allow_pattern", details
 
-    def enforce(self, role_name: str, action_text: str) -> Tuple[bool, str]:
-        """
-        Enforce rules. Returns (ok, suggestion_or_reason).
-        If not ok, suggestion_or_reason contains a short guidance like 're-prompt' or 'reassign'.
-        """
-        ok, reason = self.validate_action(role_name, action_text)
-        if ok:
-            return True, "ok"
-        # Simple enforcement strategy: re-prompt to stay in role
-        if reason.startswith("forbidden_pattern"):
-            return False, "please_rephrase_to_avoid_forbidden_behavior"
-        if reason == "no_allow_pattern_matched":
-            return False, "please_focus_on_role_responsibilities"
-        return False, reason
+        details["decision"] = "allowed_by_default"
+        return True, "allowed_by_default", details
+
+    def enforce(self, role: str, text: str) -> Tuple[bool, dict]:
+        ok, reason, details = self.validate_action(role, text)
+        suggestion = "proceed" if ok else "rephrase_or_reassign"
+        record = {
+            "ok": ok,
+            "role": role,
+            "reason": reason,
+            "suggestion": suggestion,
+            "details": details,
+        }
+        self._log(record)
+        return ok, record
+
+    def add_override(self, rule_type: str, pattern: str):
+        if rule_type not in ("allow", "deny"):
+            raise ValueError("rule_type must be 'allow' or 'deny'")
+        self.overrides[rule_type].append(re.compile(pattern, re.I))
