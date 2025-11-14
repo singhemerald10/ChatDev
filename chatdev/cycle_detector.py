@@ -31,12 +31,12 @@ class CycleDetector:
         if len(hist) < 2 * self.min_cycle_len:
             return None
 
-        # 1️⃣ pattern repetition (literal)
+        # pattern repetition (literal)
         for k in range(self.min_cycle_len, len(hist)//2 + 1):
             if hist[-k:] == hist[-2*k:-k]:
                 return {"agent": agent, "cycle_len": k, "sequence": hist[-k:], "confidence": 1.0}
 
-        # 2️⃣ semantic similarity check
+        # semantic similarity check
         try:
             vectors = self.vectorizer.fit_transform(hist[-self.min_cycle_len*2:])
             sims = cosine_similarity(vectors[-1], vectors[:-1])[0]

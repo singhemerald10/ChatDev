@@ -192,7 +192,7 @@ class ChatChain:
                     "timestamp": datetime.utcnow().isoformat()
                 }
 
-                # 1️⃣ Role Validation
+                # Role Validation
                 ok, decision = self.role_validator.enforce(role_name, action_text)
                 telemetry["decisions"].append({
                     "module": "RoleValidator",
@@ -204,14 +204,14 @@ class ChatChain:
                     self.chat_env.log(f"[RoleValidator] {role_name}: {decision['reason']}")
                     continue  # skip to next role
 
-                # 2️⃣ Memory Persistence
+                # Memory Persistence
                 self.hybrid_memory.write(
                     text=action_text,
                     meta={"role": role_name, "phase": phase, "phase_type": phase_type},
                     persist=True
                 )
 
-                # 3️⃣ Cycle Detection
+                # Cycle Detection
                 self.cycle_detector.add_action(role_name, action_text)
                 cycle_info = self.cycle_detector.detect_cycle(role_name)
                 if cycle_info:
@@ -226,7 +226,7 @@ class ChatChain:
 
                 telemetry["actions"].append(action_entry)
 
-        # --- 4️⃣ Dynamic Termination Evaluation ---
+        # --- Dynamic Termination Evaluation ---
         term_decision = self.dta.maybe_terminate(
             self.chat_env, {"cycle_detector": self.cycle_detector}
         )
